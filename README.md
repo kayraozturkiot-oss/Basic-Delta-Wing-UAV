@@ -1,22 +1,31 @@
-# Biomimetic Bat-Inspired UAV
+# 🦇 Biomimetic Bat-Inspired UAV
 
-A lightweight unmanned aerial vehicle (UAV) inspired by the wing structure and flight characteristics of bats. The project aims to investigate biomimetic design principles and apply them to a fixed-wing UAV platform.
+A lightweight unmanned aerial vehicle (UAV) inspired by the wing structure and flight characteristics of bats. This project explores biomimetic engineering concepts by applying biological design principles to a small fixed-wing aircraft platform.
+
+The primary objective is to investigate how bat-inspired wing geometry can contribute to efficient and stable flight while maintaining a lightweight and simple UAV architecture.
+
+---
 
 ## Project Overview
 
-This project focuses on the development of a bat-inspired UAV that combines aerodynamic efficiency with a lightweight structure. The design process includes airframe modeling, electronic system integration, flight control implementation, and performance evaluation.
+Nature has spent millions of years optimizing flight. Bats, as the only mammals capable of sustained powered flight, possess unique wing structures that provide excellent maneuverability and aerodynamic efficiency.
 
-The aircraft was designed as a small-scale experimental platform for studying biomimetic flight concepts and UAV development techniques.
+This project aims to develop a small-scale UAV inspired by bat wings while using readily available electronic components and additive manufacturing techniques. The aircraft serves as an experimental platform for studying biomimetic aerospace design and UAV development.
 
-## Features
+---
 
-- Biomimetic wing-inspired design
-- Lightweight airframe structure
-- Fixed-wing UAV configuration
-- Brushless motor propulsion system
-- Radio frequency communication
-- Arduino-based flight control architecture
+## Key Features
+
+- Biomimetic bat-inspired wing concept
+- Lightweight fixed-wing airframe
+- Brushless electric propulsion system
+- Arduino-based control system
+- 433 MHz wireless communication
+- Modular electronic architecture
+- CAD-designed and 3D printable components
 - Expandable for autonomous flight applications
+
+---
 
 ## Hardware Components
 
@@ -25,62 +34,151 @@ The aircraft was designed as a small-scale experimental platform for studying bi
 | Flight Controller | Arduino Mega |
 | Motor | RS2205 2300KV Brushless Motor |
 | ESC | FVT Little Bee 30A |
-| Battery | Leopard Power 1500mAh LiPo |
+| Battery | Leopard Power 1500mAh LiPo Battery |
+| Voltage Regulator | LM2596 DC-DC Buck Converter |
 | Servos | 2 × 9g Servo Motors |
 | Communication | 433 MHz RF Module |
+| Airframe Type | Bat-Inspired Fixed Wing |
 | Wingspan | Approximately 50 cm |
+
+---
 
 ## System Architecture
 
 ```text
-Battery
-   |
-   V
-ESC ---> Brushless Motor
-   |
-Arduino Mega
-   |
-   +---- RF Receiver
-   |
-   +---- Servo 1
-   |
-   +---- Servo 2
+                 LiPo Battery
+                       |
+          +------------+------------+
+          |                         |
+          V                         V
+        ESC                    LM2596
+          |                         |
+          V                         |
+ RS2205 Brushless Motor            5V
+                                    |
+                    +---------------+---------------+
+                    |                               |
+                    V                               V
+              Arduino Mega                  RF Module
+                    |
+           +--------+--------+
+           |                 |
+           V                 V
+      Servo Motor 1     Servo Motor 2
 Design Process
-Biomimetic research on bat wing structures
-Airframe modeling using CAD software
-Electronic component selection
-Control system development
-Assembly and integration
-Testing and evaluation
+1. Biomimetic Research
+
+Research was conducted on bat wing anatomy, flight mechanisms, and aerodynamic characteristics to identify design principles suitable for UAV applications.
+
+2. Concept Development
+
+Several wing configurations were evaluated before selecting a bat-inspired fixed-wing configuration that balances simplicity and aerodynamic performance.
+
+3. CAD Modeling
+
+The airframe was modeled using CAD software to optimize weight, manufacturability, and structural integrity.
+
+4. Electronics Integration
+
+The propulsion, communication, and control systems were selected and integrated into the aircraft platform.
+
+5. Prototype Manufacturing
+
+Components were fabricated using 3D printing and assembled into a complete UAV prototype.
+
+6. Testing and Evaluation
+
+Ground tests and flight evaluations were conducted to assess system performance and identify areas for future improvement.
+
+Software
+
+The aircraft control system is based on Arduino development tools.
+
+Development Environment
+Arduino IDE
+C/C++
+Serial Communication Libraries
+RF Communication Libraries
 Repository Structure
 ├── CAD/
 │   ├── Airframe Models
-│   └── STL Files
+│   ├── STL Files
+│   └── Technical Drawings
+│
+├── Firmware/
+│   ├── Arduino Source Code
+│   └── Libraries
 │
 ├── Electronics/
 │   ├── Wiring Diagrams
-│   └── Circuit Designs
-│
-├── Firmware/
-│   └── Arduino Source Code
+│   ├── Schematics
+│   └── Component List
 │
 ├── Images/
 │   ├── CAD Renders
 │   ├── Assembly Photos
+│   ├── Prototype Images
 │   └── Flight Tests
 │
-└── Documentation/
-    └── Project Reports
+├── Documentation/
+│   ├── Reports
+│   ├── Presentations
+│   └── Research Notes
+│
+└── README.md
+Bill of Materials (BOM)
+Item	Quantity
+Arduino Mega	1
+RS2205 2300KV Motor	1
+30A ESC	1
+Leopard Power 1500mAh LiPo	1
+LM2596 Voltage Regulator	1
+9g Servo Motor	2
+433 MHz RF Module	1 Set
+Propeller	1
+Airframe Components	Various
+Applications
+Biomimetic engineering research
+UAV education projects
+Aerodynamics studies
+Embedded systems development
+Flight control experimentation
 Future Improvements
-Autonomous flight capability
-GPS navigation
-Telemetry integration
-Advanced flight stabilization
-Improved aerodynamic optimization
+GPS Navigation
+Autonomous Flight Modes
+Flight Stabilization Algorithms
+Telemetry System
+FPV Integration
+Weight Optimization
+Improved Wing Mechanisms
+Advanced Aerodynamic Analysis
+Results
+
+The project demonstrates the feasibility of applying biomimetic design principles to small UAV platforms while maintaining a relatively simple and low-cost architecture.
+
+Future iterations will focus on improving flight efficiency, control accuracy, and autonomous capabilities.
+
+Gallery
+CAD Model
+
+Insert CAD render images here.
+
+Electronics Assembly
+
+Insert wiring and assembly photos here.
+
+Final Prototype
+
+Insert completed aircraft images here.
+
+Flight Testing
+
+Insert flight test photos and videos here.
+
 License
 
-This project is intended for educational and research purposes.
+This repository is intended for educational, academic, and research purposes.
 
 Author
 
-Developed as an academic UAV design project focusing on biomimetic engineering and aerospace applications.
+Developed as an academic UAV project focused on biomimetic aerospace design, embedded systems, and unmanned aerial vehicle technologies.
