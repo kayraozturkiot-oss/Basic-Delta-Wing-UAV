@@ -1,0 +1,114 @@
+/*
+ * RF433 ESP32 TRANSMITTER
+ * Features: Checksum, deadzone filter, wireless disabled
+ * Pins: TX=4, JOY_X=1, JOY_Y=2, BTN=5
+ */
+
+#include <WiFi.h>       // Used to disable WiFi (noise reduction)
+#include <RCSwitch.h>   // RF433 protocol library
+
+// === OBJECT DEFINITION ===
+RCSwitch mySwitch = RCSwitch();   // RF433 transmitter object
+
+// === PIN DEFINITIONS ===
+#define TX_PIN   4   // RF433 transmitter data pin
+#define JOY_X    1   // Joystick X-axis analog pin
+#define JOY_Y    2   // Joystick Y-axis analog pin
+#define BTN      5   // Button pin (active-LOW with INPUT_PULLUP)
+
+// === TIMING AND FILTER SETTINGS ===
+#define SEND_INTERVAL_MS  150   // Packet transmission period (ms)
+#define JOY_DEADZONE      8     // Center deadzone width (±8 in 0-255 range)
+#define JOY_CENTER        127   // Joystick center value (midpoint of 0-255 range)
+
+/*
+ * --- Packet structure (32 bits) ---
+ * [31:24] = X-axis (8 bits, 0-255)
+ * [23:16] = Y-axis (8 bits, 0-255)
+ * [15:8]  = Flags: upper nibble=0xA (validity marker), bit0=button state
+ * [7:0]   = Checksum (XOR-based, for corrupted packet detection)
+ */
+
+// === CHECKSUM CALCULATION ===
+// XORs the X, Y, and flags bytes then adds the 0x5A salt
+// Receiver performs the same calculation to verify packet integrity
+uint8_t calcChecksum(uint8_t x, uint8_t y, uint8_t flags) {
+  return x ^ y ^ flags ^ 0x5A;   // 0x5A: fixed salt value (makes random matches harder)
+}
+
+// === SETUP - RUNS ONCE ===
+void setup() {
+  delay(2000);   // Short delay for power stability
+  Serial.begin(115200);
+  Serial.println("=== ESP32 RF433 Transmitter Starting ===");
+
+  // Fully disable WiFi and Bluetooth to reduce RF noise
+  WiFi.mode(WIFI_OFF);
+  btStop();
+
+  // Button pin: active-LOW configuration with internal pull-up
+  // (pressed=LOW=1, released=HIGH=0 → corrected with !digitalRead)
+  pinMode(BTN, INPUT_PULLUP);
+
+  // RF transmitter settings
+  mySwitch.enableTransmit(TX_PIN);    // Enable transmitter pin
+  mySwitch.setProtocol(1);            // RC-Switch protocol 1 (compatible with common 433MHz devices)
+  mySwitch.setPulseLength(320);       // Pulse width (µs) - must match receiver
+  mySwitch.setRepeatTransmit(5);      // Send each packet 5 times (RF loss tolerance)
+
+  Serial.println("Transmitter ready.");
+}
+
+// === LOOP - RUNS CONTINUOUSLY ===
+void loop() {
+  static unsigned long lastSend = 0;   // Last send timestamp (static: value is preserved)
+
+  // Wait for transmission period (non-blocking check instead of busy-wait)
+  if (millis() - lastSend < SEND_INTERVAL_MS) return;
+  lastSend = millis();   // Update counter
+
+  // --- Raw ADC read (ESP32: 12-bit, 0-4095) ---
+  int rawX = analogRead(JOY_X);
+  int rawY = analogRead(JOY_Y);
+  uint8_t btn = !digitalRead(BTN);   // Active-LOW: pressed=1, released=0
+
+  // --- Convert 12-bit ADC value to 8-bit (0-4095 → 0-255) ---
+  uint8_t x8 = (uint8_t)map(rawX, 0, 4095, 0, 255);
+  uint8_t y8 = (uint8_t)map(rawY, 0, 4095, 0, 255);
+
+  // --- Deadzone filter: suppress small jitter near center ---
+  // Joystick may not return to exact center physically; this filter stabilizes it
+  if (abs((int)x8 - JOY_CENTER) < JOY_DEADZONE) x8 = JOY_CENTER;
+  if (abs((int)y8 - JOY_CENTER) < JOY_DEADZONE) y8 = JOY_CENTER;
+
+  // --- Build flags byte ---
+  // Upper nibble 0xA: fixed marker so receiver can reject spurious signals
+  // Lower nibble bit0: button state
+  uint8_t flags = 0xA0 | (btn & 0x01);
+
+  // --- Calculate checksum ---
+  uint8_t chk = calcChecksum(x8, y8, flags);
+
+  // --- Combine 4 bytes into a 32-bit packet (big-endian order) ---
+  uint32_t packet = ((uint32_t)x8    << 24)   // Bits 31-24: X
+                  | ((uint32_t)y8    << 16)   // Bits 23-16: Y
+                  | ((uint32_t)flags <<  8)   // Bits 15-8 : Flags
+                  | ((uint32_t)chk);          // Bits  7-0 : Checksum
+
+  // --- Transmit packet over RF ---
+  mySwitch.send(packet, 32);   // Send 32-bit packet (repeated setRepeatTransmit times)
+
+  // --- Debug output to serial monitor ---
+  Serial.print("TX | X:");
+  Serial.print(x8);
+  Serial.print(" Y:");
+  Serial.print(y8);
+  Serial.print(" BTN:");
+  Serial.print(btn);
+  Serial.print(" FLAGS:0x");
+  Serial.print(flags, HEX);
+  Serial.print(" CHK:0x");
+  Serial.print(chk, HEX);
+  Serial.print(" RAW:0x");
+  Serial.println(packet, HEX);   // Show full packet in hex
+}
