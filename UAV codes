@@ -1,0 +1,179 @@
+#include <RCSwitch.h>
+#include <Servo.h>
+
+// === OBJECT DEFINITIONS ===
+RCSwitch mySwitch = RCSwitch();   // RF433 receiver object
+Servo servo2;                      // X-axis servo
+Servo servo1;                      // Y-axis servo
+Servo esc;                         // ESC (motor driver) object
+
+// === PIN DEFINITIONS ===
+#define RX_PIN      3    // RF433 receiver data pin (interrupt-capable)
+#define SERVO2      6    // X-axis servo PWM pin
+#define SERVO1      7    // Y-axis servo PWM pin
+#define ESC_PIN     5    // ESC PWM pin
+
+// === TIMEOUT ===
+#define TIMEOUT_MS    1000   // Connection considered lost if no signal for 1 second
+
+// === SERVO SETTINGS ===
+#define SERVO_CENTER  90     // Center angle for servos (range: 0-180)
+#define SMOOTH_FACTOR 0.6f   // Smoothing factor (0=no movement, 1=instant)
+
+// === ESC MICROSECOND VALUES ===
+#define ESC_STOP      1000   // Motor stop signal
+#define ESC_YUZDE70   1700   // Motor at 70% power
+#define ESC_YUZDE90   1900   // Motor at 90% power
+
+// === GLOBAL VARIABLES ===
+unsigned long lastPacketTime = 0;    // Timestamp of last successful packet (ms)
+bool connected = false;              // Connection status flag
+float smoothX = 90.0f;              // Smoothed X servo position
+float smoothY = 90.0f;              // Smoothed Y servo position
+
+int escKademe = 0;                   // ESC step: 0=stop, 1=70%, 2=90%
+bool lastBtn = false;                // Previous button state (for rising edge detection)
+
+// === CHECKSUM CALCULATION ===
+// Generates a simple XOR-based error check byte
+uint8_t calcChecksum(uint8_t x, uint8_t y, uint8_t flags) {
+  return x ^ y ^ flags ^ 0x5A;      // 0x5A is a fixed salt value
+}
+
+// === PACKET VALIDATION ===
+// Splits a 32-bit raw value into fields and checks validity
+// Returns: true=valid packet, false=corrupted/invalid packet
+bool validatePacket(uint32_t data, uint8_t &outX, uint8_t &outY, uint8_t &outBtn) {
+  // Split 32-bit value into 4 bytes (MSB first)
+  uint8_t x     = (data >> 24) & 0xFF;   // Bits 31-24: X-axis value
+  uint8_t y     = (data >> 16) & 0xFF;   // Bits 23-16: Y-axis value
+  uint8_t flags = (data >>  8) & 0xFF;   // Bits 15-8 : Flags (upper nibble=0xA, lower=button)
+  uint8_t chk   = (data      ) & 0xFF;   // Bits  7-0 : Checksum byte
+
+  // Invalid packet if upper nibble is not 0xA0 (sync bit)
+  if ((flags & 0xF0) != 0xA0) return false;
+
+  // Corrupted packet if checksum doesn't match
+  if (calcChecksum(x, y, flags) != chk) return false;
+
+  // Write valid data to output parameters
+  outX   = x;
+  outY   = y;
+  outBtn = flags & 0x01;   // Lowest bit = button state
+  return true;
+}
+
+// === ESC STEP CONTROL ===
+// Sends the appropriate PWM signal to the ESC based on the given step
+void escAyarla(int kademe) {
+  switch (kademe) {
+    case 0:
+      esc.writeMicroseconds(ESC_STOP);
+      Serial.println("ESC: STOP (1000us)");
+      break;
+    case 1:
+      esc.writeMicroseconds(ESC_YUZDE70);
+      Serial.println("ESC: 70% (1700us)");
+      break;
+    case 2:
+      esc.writeMicroseconds(ESC_YUZDE90);
+      Serial.println("ESC: 90% (1900us)");
+      break;
+  }
+}
+
+// === RETURN TO SAFE POSITION ===
+// Called on startup or when connection is lost
+void goSafePosition() {
+  servo2.write(SERVO_CENTER);
+  servo1.write(SERVO_CENTER);
+  smoothX = SERVO_CENTER;       // Reset smoothing values too
+  smoothY = SERVO_CENTER;
+  escKademe = 0;
+  escAyarla(0);                 // Stop the motor
+  Serial.println(">>> Returned to safe position");
+}
+
+// === SETUP - RUNS ONCE ===
+void setup() {
+  Serial.begin(115200);
+  Serial.println("=== Arduino Mega RF433 Receiver Starting ===");
+
+  // Attach RF receiver to interrupt pin
+  mySwitch.enableReceive(digitalPinToInterrupt(RX_PIN));
+
+  // Attach servos and ESC to their pins
+  servo2.attach(SERVO2);
+  servo1.attach(SERVO1);
+  esc.attach(ESC_PIN);
+
+  goSafePosition();   // Move to initial safe position
+
+  // ESC arm sequence: send stop signal and wait for ESC to be ready
+  Serial.println("Waiting for ESC arm...");
+  esc.writeMicroseconds(ESC_STOP);
+  delay(3000);   // Wait 3 seconds (ESC calibration/arm time)
+  Serial.println("ESC ready.");
+  Serial.println("Receiver ready, waiting for signal...");
+}
+
+// === LOOP - RUNS CONTINUOUSLY ===
+void loop() {
+  // Timeout check: go to safe position if signal is lost
+  if (connected && (millis() - lastPacketTime > TIMEOUT_MS)) {
+    connected = false;
+    Serial.println("!!! CONNECTION LOST");
+    goSafePosition();
+  }
+
+  // Skip processing if no new RF packet is available
+  if (!mySwitch.available()) return;
+
+  // Read packet and release the receiver
+  uint32_t raw  = (uint32_t)mySwitch.getReceivedValue();
+  int      bits = mySwitch.getReceivedBitlength();
+  mySwitch.resetAvailable();   // Prepare for the next packet
+
+  // Reject zero values or wrong bit count
+  if (raw == 0 || bits != 32) return;
+
+  // Validate packet and extract fields
+  uint8_t x8, y8, btn;
+  if (!validatePacket(raw, x8, y8, btn)) return;
+
+  // Print connection established message on first valid packet
+  if (!connected) {
+    connected = true;
+    Serial.println(">>> CONNECTION ESTABLISHED");
+  }
+  lastPacketTime = millis();   // Reset timeout counter
+
+  // --- Button rising edge detection (trigger only at the moment of press) ---
+  bool currentBtn = (btn == 1);
+  if (currentBtn && !lastBtn) {         // New press: previous=0, current=1
+    escKademe = (escKademe + 1) % 3;   // Cycle: 0->1->2->0
+    escAyarla(escKademe);
+  }
+  lastBtn = currentBtn;   // Save for next iteration
+
+  // --- Servo movement (map 0-255 joystick value to 0-180 degrees) ---
+  int targetX = map(x8, 0, 255, 0, 180);   // Target X angle
+  int targetY = map(y8, 0, 255, 0, 180);   // Target Y angle
+
+  // Exponential smoothing: gradual transition instead of instant jump
+  smoothX += SMOOTH_FACTOR * (targetX - smoothX);
+  smoothY += SMOOTH_FACTOR * (targetY - smoothY);
+
+  servo2.write((int)smoothX);
+  servo1.write((int)smoothY);
+
+  // Print status to serial monitor
+  Serial.print("RX | X:");
+  Serial.print((int)smoothX);
+  Serial.print(" Y:");
+  Serial.print((int)smoothY);
+  Serial.print(" BTN:");
+  Serial.print(btn);
+  Serial.print(" ESC step:");
+  Serial.println(escKademe);
+}
